@@ -1,0 +1,129 @@
+clear;
+clc;
+close all;
+
+% Read in data
+folderPath = 'ASEN3802_HeatConduction_FA25';
+a = dir([folderPath '/*mA*']);
+
+% Extracting data
+for i=1:length(a)
+   allData{i} = readmatrix([folderPath '/' a(i).name], 'NumHeaderLines', 1);
+   % how to get voltage and amperage from file names?
+   % - options include strsplit, regex, etc.
+   % ultimately, we need to use the format of each file name
+   % 'material'_'volts'V_'amps'mA
+   b = strsplit(a(i).name,'_'); % gives a cell array (b) that is 1x3
+   % {'material','voltsV','ampsmA'} -- now split by 'V' and 'mA'
+   v = strsplit(b{2},'V'); % volts are always in the second portion
+   ampval= strsplit(b{3},'mA'); % amps are always in the third portion
+   volts(i) = str2num(v{1}); % convert string to number (vector)
+   amps(i) = str2num(ampval{1});
+end
+
+steel = allData{5};
+brass30v = allData{4};
+brass25v = allData{3};
+aluminum30v = allData{2};
+aluminum25v = allData{1};
+aluminum25v = aluminum25v(1:end-2, :);
+
+% Constants
+Hexp_slope = [287.177, 150.281,105.512,78.946,55.212];
+
+k = 130; 
+cp = 960;
+rho = 2810;
+
+alpha = k / (rho * cp);
+
+t1 = 1;
+t2 = 1000;
+
+L = 0.034925 + 0.0889 + 0.0254;
+T0 = 17.0501; % K
+x = 0.034925 + 0.0889; % m
+
+
+x_vals = linspace(0, x, 7);
+
+datasets = {steel, brass30v, brass25v, aluminum30v, aluminum25v};
+dataset_names = {'Steel', 'Brass 30v', 'Brass 25V', 'Aluminum 30v', 'Aluminum 25v'};
+
+n_chosen = 3;
+
+
+% Loop through each dataset
+for d = 1:length(datasets)
+    
+    data_exp = datasets{d};
+    H_Al = Hexp_slope(d); % corresponding slope
+    time_exp = data_exp(:,1);
+    t_time = time_exp;
+    
+    figure();
+    hold on;
+    grid on;
+    
+    % Plot analytical curves
+    for j = 1:length(x_vals)
+        x_current = x_vals(j);
+        T_time = zeros(size(t_time));
+        
+        for i = 1:length(t_time)
+            summation = 0;
+            for n = 1:n_chosen
+                lambda_n = ((2 * n - 1) * pi) / (2 * L);
+                bn = ((8 * L * H_Al) / (((2 * n) - 1)^2 * (pi^2))) * (-1)^n;
+                summation = summation + bn * sin(lambda_n * x_current) * exp(-(lambda_n^2) * alpha * t_time(i));
+            end
+            T_time(i) = T0 + H_Al * x_current + summation;
+        end
+        
+        if j == 1
+            h_analytical = plot(t_time, T_time, 'b','LineWidth',1.5); % save first line handle for legend
+        else
+            plot(t_time, T_time, 'b','LineWidth',1.5);
+        end
+    end
+    
+    % Overlay experimental data
+    time_exp = data_exp(:,1);
+    num_TC = size(data_exp,2)-1;
+    for j = 1:num_TC
+        if j == 1
+            h_experimental = plot(time_exp, data_exp(:,j+1),'r','LineWidth',1); % save first line handle
+        else
+            plot(time_exp, data_exp(:,j+1),'r','LineWidth',1);
+        end
+    end
+    
+    xlabel('Time (s)');
+    ylabel('Temperature (°C)');
+    title(['Temperature vs Time (Experimental and Analytical) - ' dataset_names{d}]);
+    legend([h_analytical h_experimental], {'Analytical (Model)', 'Experimental (Thermocouples)'}, 'Location','best');
+    hold off;
+    
+end
+
+
+
+
+function plotThermocouples(data, nameStr)
+    figure;
+    hold on;
+
+    time = data(:,1);
+    num_TC = size(data,2) - 1;
+
+    for j = 1:num_TC
+    plot(time, data(:,j+1), 'red','DisplayName', ['TC' num2str(j)]);
+    end
+
+    xlabel('Time (s)');
+    ylabel('Temperature (°C)');
+    title(['Thermocouples vs Time - ' nameStr]);
+    legend('Location','best');
+    grid on;
+    hold off;
+end
