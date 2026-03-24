@@ -1,0 +1,128 @@
+clear;
+clc;
+close all;
+
+folderPath = 'ASEN3802_HeatConduction_FA25';
+a = dir([folderPath '/*mA*']);
+
+for i=1:length(a)
+   allData{i} = readmatrix([folderPath '/' a(i).name], 'NumHeaderLines', 1);
+
+   b = strsplit(a(i).name,'_');
+   v = strsplit(b{2},'V');
+   ampval= strsplit(b{3},'mA');
+
+   volts(i) = str2num(v{1});
+   amps(i) = str2num(ampval{1});
+end
+
+steel = allData{5};
+brass30v = allData{4};
+brass25v = allData{3};
+aluminum30v = allData{2};
+aluminum25v = allData{1};
+aluminum25v = aluminum25v(1:end-2, :);
+
+Hexp_slope = [287.177, 150.28, 105.512 ,78.946,55.212];
+
+k = 130; 
+cp = 960;
+rho = 2810;
+alpha_adj = [5e-6 , 1.6e-5,1.6e-5,2.4e-5,2.5e-5];
+t1 = 1;
+t2 = 1000;
+
+L = 0.034925 + 0.0889 + 0.0254;
+T0_vals = [15.1204,16.7662,16.51,17.2011, 17.0501]; 
+
+x0 = 0;
+offset = 1.375 * 0.0254;  
+dx = 0.5 * 0.0254;         
+num_TC = 8;
+
+x_vals = x0 + offset + (0:num_TC-1)*dx;
+
+datasets = {steel, brass30v, brass25v, aluminum30v, aluminum25v};
+dataset_names = {'Steel', 'Brass 30v', 'Brass 25V', 'Aluminum 30v', 'Aluminum 25v'};
+
+n_chosen = 3;
+
+for d = 1:length(datasets)
+    
+    data_exp = datasets{d};
+    H = Hexp_slope(d);
+    T0 = T0_vals(d);
+    time_exp = data_exp(:,1);
+    t_time = time_exp;
+
+    num_TC = size(data_exp,2)-1;
+
+    alpha = linspace(1e-6,1e-4,100);
+    RMS_all = zeros(length(alpha), num_TC);
+
+    for g = 1:length(alpha)
+        a_val = alpha(g);
+
+        for j = 1:num_TC
+            x_current = x_vals(j);
+            T_time = zeros(size(t_time));
+
+            for i = 1:length(t_time)
+                summation = 0;
+                for n = 1:n_chosen
+                    lambda_n = ((2 * n - 1) * pi) / (2 * L);
+                    bn = ((8 * L * H) / (((2 * n) - 1)^2 * (pi^2))) * (-1)^n;
+                    summation = summation + bn * sin(lambda_n * x_current) * exp(-(lambda_n^2) * a_val * t_time(i));
+                end
+                T_time(i) = T0 + H * x_current + summation;
+            end
+
+            T_exp = data_exp(:, j+1);
+            diff = T_time - T_exp;
+            RMS_all(g, j) = sqrt(mean(diff.^2));
+        end
+    end
+
+    [~, idx] = min(mean(RMS_all,2));
+    best_alpha = alpha(idx);
+
+    fprintf('Best alpha for %s: %e\n', dataset_names{d}, best_alpha);
+
+    figure;
+    hold on;
+    grid on;
+
+    for j = 1:num_TC
+        x_current = x_vals(j);
+        T_time = zeros(size(t_time));
+
+        for i = 1:length(t_time)
+            summation = 0;
+            for n = 1:n_chosen
+                lambda_n = ((2 * n - 1) * pi) / (2 * L);
+                bn = ((8 * L * H) / (((2 * n) - 1)^2 * (pi^2))) * (-1)^n;
+                summation = summation + bn * sin(lambda_n * x_current) * exp(-(lambda_n^2) * best_alpha * t_time(i));
+            end
+            T_time(i) = T0 + H * x_current + summation;
+        end
+
+        T_exp = data_exp(:, j+1);
+
+        plot(t_time, T_exp, 'LineWidth', 1.5,'Color','r');
+        plot(t_time, T_time, '--', 'LineWidth', 1.5,'Color', 'b');
+    end
+
+    xlabel('Time (s)');
+    ylabel('Temperature (°C)');
+    title(['Best Alpha Fit - ' dataset_names{d}]);
+
+    legendStrings = {};
+    for j = 1:num_TC
+        legendStrings{end+1} = ['Exp TC ' num2str(j)];
+        legendStrings{end+1} = ['Model TC ' num2str(j)];
+    end
+    legend(legendStrings, 'Location','best');
+
+    hold off;
+
+end
