@@ -28,6 +28,8 @@ Hexp_slope = [287.177, 150.28, 105.512 ,78.946,55.212];
 k = 130; 
 cp = 960;
 rho = 2810;
+alpha_og = 130 / (960*2810);
+
 alpha_adj = [5e-6 , 1.6e-5,1.6e-5,2.4e-5,2.5e-5];
 t1 = 1;
 t2 = 1000;
@@ -109,7 +111,7 @@ for d = 1:length(datasets)
         T_exp = data_exp(:, j+1);
 
         plot(t_time, T_exp, 'LineWidth', 1.5,'Color','r');
-        plot(t_time, T_time, '--', 'LineWidth', 1.5,'Color', 'b');
+        plot(t_time, T_time, 'LineWidth', 1.5,'Color', 'b');
     end
 
     xlabel('Time (s)');
@@ -126,3 +128,9 @@ for d = 1:length(datasets)
     hold off;
 
 end
+
+steady_time = [8000,3500,3500,2000,1500];
+fourier  = alpha_adj.*steady_time ./ (L^2);
+
+
+
